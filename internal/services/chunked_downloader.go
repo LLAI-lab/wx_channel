@@ -208,6 +208,7 @@ func (d *ChunkedDownloader) downloadChunks(ctx context.Context, state *DownloadS
 
 	var mu sync.Mutex // 保护共享状态
 	lastSpeedCalcTime := time.Now()
+	lastProgressSentTime := time.Now()
 	lastDownloadedSize := downloadedSize
 
 	// 启动 worker
@@ -273,16 +274,19 @@ func (d *ChunkedDownloader) downloadChunks(ctx context.Context, state *DownloadS
 					utils.Warn("[ChunkedDownloader] Failed to update progress: %v", err)
 				}
 
-				// 发送进度更新
-				d.sendProgress(ProgressUpdate{
-					QueueID:         item.ID,
-					DownloadedSize:  downloadedSize,
-					TotalSize:       item.TotalSize,
-					ChunksCompleted: currChunk,
-					ChunksTotal:     totalChunks,
-					Speed:           bytesPerSec,
-					Status:          database.QueueStatusDownloading,
-				})
+				// 发送进度更新（至少间隔1秒，防止高频推送导致前端 DOM 重建风暴）
+				if now.Sub(lastProgressSentTime).Seconds() >= 1.0 {
+					lastProgressSentTime = now
+					d.sendProgress(ProgressUpdate{
+						QueueID:         item.ID,
+						DownloadedSize:  downloadedSize,
+						TotalSize:       item.TotalSize,
+						ChunksCompleted: currChunk,
+						ChunksTotal:     totalChunks,
+						Speed:           bytesPerSec,
+						Status:          database.QueueStatusDownloading,
+					})
+				}
 			}
 		}()
 	}

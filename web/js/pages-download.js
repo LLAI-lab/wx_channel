@@ -1722,11 +1722,12 @@ async function pollBatchProgress(queueItemId) {
                     return;
                 }
 
-                // Update progress from currentTask
+                // Update progress from currentTask（仅更新数据，不重建 DOM——
+                // 高频全量重渲染是下载时页面内存溢出的主因）
                 if (progress.currentTask && progress.currentTask.progress) {
                     const percent = progress.currentTask.progress;
                     item.downloadedSize = Math.floor((percent / 100) * item.totalSize);
-                    renderQueueList();
+                    updateQueueStats();
                 }
 
                 lastDone = progress.done;
@@ -1987,11 +1988,18 @@ function updateQueueItemProgress(progressData) {
         item.speed = progressData.speed;
         item.status = progressData.status;
 
-        // Re-render just this item for performance
+        // 轻量更新：只改进度条宽度与文本，不重建 DOM。
+        // 进度推送非常频繁（多路并发时每秒多次），outerHTML 重建整条节点
+        // 会导致浏览器内存持续增长直至 Out of Memory。
         const itemElement = document.querySelector(`.queue-item[data-id="${item.id}"]`);
         if (itemElement) {
-            const index = queueState.items.indexOf(item);
-            itemElement.outerHTML = renderQueueItem(item, index);
+            const fill = itemElement.querySelector('.queue-progress-fill');
+            if (fill) fill.style.width = calculateProgress(item) + '%';
+            const progressTextEl = itemElement.querySelector('.queue-progress-text');
+            if (progressTextEl) {
+                progressTextEl.textContent =
+                    `${formatBytes(item.downloadedSize || 0)} / ${formatBytes(item.totalSize || 0)}`;
+            }
         }
 
         updateQueueStats();
