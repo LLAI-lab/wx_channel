@@ -26,6 +26,7 @@ type APIRouter struct {
 	certificateService              *api.CertificateService
 	versionService                  *api.VersionAPI
 	radarAPI                        *api.RadarServiceAPI
+	authorBackfillAPI               *api.AuthorBackfillAPI
 	officialAccountService          *officialaccount.Service
 	officialAccountRoutesRegistered bool
 	articleArchiveRoutesRegistered  bool
@@ -42,6 +43,16 @@ func (r *APIRouter) SetOfficialAccountService(service *officialaccount.Service) 
 	r.officialAccountService = service
 	service.RegisterRoutes(r.mux)
 	r.officialAccountRoutesRegistered = true
+}
+
+// SetAuthorBackfillAPI mounts the author full-download API. Optional so the
+// router keeps its existing construction contract when the service is absent.
+func (r *APIRouter) SetAuthorBackfillAPI(apiHandler *api.AuthorBackfillAPI) {
+	if r == nil || apiHandler == nil || r.mux == nil {
+		return
+	}
+	r.authorBackfillAPI = apiHandler
+	apiHandler.RegisterRoutes(r.mux)
 }
 
 // SetArticleArchiveHandler mounts the article download adapter separately from

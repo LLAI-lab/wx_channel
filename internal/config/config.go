@@ -83,6 +83,9 @@ type Config struct {
 
 	// 功能开关
 	RadarEnabled bool `mapstructure:"radar_enabled"`
+
+	// 作者全量下载
+	AuthorBackfillPageDelay int `mapstructure:"author_backfill_page_delay"` // 翻页间隔秒数（防风控）
 }
 
 var globalConfig *Config
@@ -246,6 +249,9 @@ func setDefaults() {
 
 	// 功能默认值
 	viper.SetDefault("radar_enabled", false)
+
+	// 作者全量下载默认值
+	viper.SetDefault("author_backfill_page_delay", 2) // 翻页间隔2秒
 }
 
 // GetMachineID 获取或生成唯一的机器 ID (稳定硬件特征码)

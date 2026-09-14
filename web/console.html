@@ -1389,6 +1389,24 @@
                         <span id="radarGlobalStatusText">系统会在后台静默轮询以下博主，发现新视频后会自动推入您的下载队列。(如果博主列表为空，请先在视频号添加博主)</span>
                     </div>
 
+                    <!-- 作者全量下载进度 -->
+                    <div id="backfillStatusCard" style="display: none; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; background: var(--bg-secondary);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <strong id="backfillAuthorName">--</strong>
+                                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">全量下载历史视频</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <span id="backfillStatusText" style="font-size: 13px;">--</span>
+                                <button class="btn btn-danger" id="backfillStopButton" onclick="stopBackfill()" style="padding: 4px 8px; font-size: 13px;">停止</button>
+                            </div>
+                        </div>
+                        <div style="height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden;">
+                            <div id="backfillProgressBar" style="height: 100%; width: 0%; background: var(--primary-color); border-radius: 3px; transition: width 0.5s;"></div>
+                        </div>
+                        <div id="backfillDetailText" style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">--</div>
+                    </div>
+
                     <div id="radarTargetList">
                         <table class="data-table" id="radarTable">
                             <thead>
@@ -1653,7 +1671,26 @@
                         <label>视频号唯一 ID <span style="color: red">*</span></label>
                         <input type="text" id="radarUsername" placeholder="博主加密ID v2_xxxx..." required
                             style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
-                        <div class="form-hint" style="margin-top: 4px;">由于微信限制，需从搜索接口抓取到的原始 username。</div>
+                        <div class="form-hint" style="margin-top: 4px;">由于微信限制，需从搜索接口抓取到的原始 username。可直接粘贴，或通过下方昵称搜索自动填充。</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>昵称搜索（可选）</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="radarSearchKeyword" placeholder="输入博主昵称搜索"
+                                style="flex: 1; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+                            <button class="btn btn-secondary" type="button" onclick="searchAuthorByNickname()"
+                                style="padding: 8px 12px; flex-shrink: 0;">搜索</button>
+                        </div>
+                        <div id="radarSearchResults" style="display: none; margin-top: 8px; border: 1px solid var(--border-color); border-radius: 4px; max-height: 160px; overflow-y: auto;"></div>
+                    </div>
+
+                    <div class="form-group" id="radarBackfillGroup">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="radarBackfillEnabled" checked>
+                            <span>同时下载该作者的全部历史视频</span>
+                        </label>
+                        <div class="form-hint" style="margin-top: 4px;">保存后将自动翻页拉取该作者的全部已发布视频并加入下载队列（需要微信页面在线）。</div>
                     </div>
 
                     <div class="form-group">

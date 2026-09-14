@@ -15,9 +15,17 @@ document.addEventListener('DOMContentLoaded', () => {
         item.addEventListener('click', () => {
             if (item.dataset.page === 'radar') {
                 loadRadarTargets();
+                refreshBackfillStatus();
             }
         });
     });
+
+    // 全量下载进度轮询（30秒一次，与雷达列表刷新错开）
+    setInterval(() => {
+        if (document.getElementById('page-radar') && document.getElementById('page-radar').style.display !== 'none') {
+            refreshBackfillStatus();
+        }
+    }, 30000);
 });
 
 // 加载雷达监控目标
@@ -122,6 +130,7 @@ function renderRadarTable() {
                 ? `<button class="btn btn-secondary" onclick="toggleRadarStatus('${target.id}', 'paused')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">暂停</button>`
                 : `<button class="btn btn-primary" onclick="toggleRadarStatus('${target.id}', 'active')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">恢复</button>`
             }
+                        <button class="btn btn-secondary" onclick="startBackfill('${target.username}', '${escapeHtml(target.author_name)}')" title="翻页拉取该作者全部历史视频并加入下载队列" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">下载全部</button>
                         <button class="btn btn-secondary" onclick="editRadarTarget('${target.id}')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">编辑</button>
                         <button class="btn btn-secondary" onclick="showRadarLogs('${target.id}', '${escapeHtml(target.author_name)}')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">详情</button>
                         <button class="btn btn-danger" onclick="deleteRadarTarget('${target.id}')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">删除</button>
@@ -138,6 +147,15 @@ function openAddRadarModal() {
     document.getElementById('radarAuthorName').value = '';
     document.getElementById('radarUsername').value = '';
     document.getElementById('radarInterval').value = 60;
+    const keywordInput = document.getElementById('radarSearchKeyword');
+    if (keywordInput) keywordInput.value = '';
+    const results = document.getElementById('radarSearchResults');
+    if (results) {
+        results.style.display = 'none';
+        results.innerHTML = '';
+    }
+    const backfillGroup = document.getElementById('radarBackfillGroup');
+    if (backfillGroup) backfillGroup.style.display = 'block';
 
     document.getElementById('radarDialogTitle').innerText = '添加监控目标';
     const overlay = document.getElementById('addRadarDialogOverlay');
@@ -155,6 +173,16 @@ function editRadarTarget(id) {
     document.getElementById('radarAuthorName').value = target.author_name;
     document.getElementById('radarUsername').value = target.username;
     document.getElementById('radarInterval').value = target.interval_minutes;
+    const keywordInput = document.getElementById('radarSearchKeyword');
+    if (keywordInput) keywordInput.value = '';
+    const results = document.getElementById('radarSearchResults');
+    if (results) {
+        results.style.display = 'none';
+        results.innerHTML = '';
+    }
+    // 编辑模式隐藏全量下载选项（用列表行的"下载全部"按钮触发）
+    const backfillGroup = document.getElementById('radarBackfillGroup');
+    if (backfillGroup) backfillGroup.style.display = 'none';
 
     document.getElementById('radarDialogTitle').innerText = '编辑监控目标';
     const overlay = document.getElementById('addRadarDialogOverlay');
@@ -209,6 +237,11 @@ async function saveRadarTarget() {
             showMessage(id ? '更新成功' : '添加成功', 'success');
             closeAddRadarModal();
             loadRadarTargets();
+
+            // 新增目标且勾选了全量下载时，启动作者全量历史视频下载
+            if (!id && document.getElementById('radarBackfillEnabled').checked) {
+                startBackfill(username, authorName);
+            }
         } else {
             showMessage(res.message || '操作失败', 'error');
         }
@@ -216,6 +249,181 @@ async function saveRadarTarget() {
         console.error('保存监控目标失败:', err);
         showMessage('保存失败，请检查网络', 'error');
     }
+}
+
+// ------------------- 作者全量下载相关 -------------------
+
+// 按昵称搜索账号，选中后自动填充昵称与 username
+async function searchAuthorByNickname() {
+    const keyword = document.getElementById('radarSearchKeyword').value.trim();
+    if (!keyword) return showMessage('请输入要搜索的昵称', 'warning');
+
+    const resultsBox = document.getElementById('radarSearchResults');
+    resultsBox.style.display = 'block';
+    resultsBox.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px;">搜索中...</div>';
+
+    try {
+        const response = await fetch('/api/search/contact?type=1&page=1&page_size=20&keyword=' + encodeURIComponent(keyword));
+        const json = await response.json();
+        if (!(json.code === 0 || json.code === 200)) {
+            resultsBox.innerHTML = '<div style="padding: 12px; color: var(--danger-color); font-size: 13px;">' + escapeHtml(json.message || '搜索失败') + '</div>';
+            return;
+        }
+
+        const contacts = extractAuthorCandidates(json.data);
+        if (contacts.length === 0) {
+            resultsBox.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">未找到相关账号（需要微信页面在线，若未连接请先打开一个视频号页面）</div>';
+            return;
+        }
+
+        resultsBox.innerHTML = contacts.map((c, idx) => `
+            <div style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 13px;"
+                onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background=''"
+                onclick="pickAuthorCandidate(${idx})">
+                <div style="font-weight: 500;">${escapeHtml(c.name)}</div>
+                <div style="color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(c.username)}">${escapeHtml(c.username)}</div>
+            </div>
+        `).join('');
+        window.__radarAuthorCandidates = contacts;
+    } catch (err) {
+        console.error('昵称搜索失败:', err);
+        resultsBox.innerHTML = '<div style="padding: 12px; color: var(--danger-color); font-size: 13px;">搜索请求失败，请检查网络</div>';
+    }
+}
+
+// 从账号搜索的原始微信返回中递归提取候选账号（防御性解析，兼容不同返回结构）
+function extractAuthorCandidates(data) {
+    const seen = new Set();
+    const results = [];
+    const rawUsername = (u) => (typeof u === 'string' && /^v2_[A-Za-z0-9_+\-=/]+$/.test(u)) ? u : '';
+
+    function walk(node, depth) {
+        if (!node || depth > 8 || results.length >= 20) return;
+        if (Array.isArray(node)) {
+            node.forEach(item => walk(item, depth + 1));
+            return;
+        }
+        if (typeof node !== 'object') return;
+        const username = rawUsername(node.username) || rawUsername(node.userName) || rawUsername(node.finderUserName);
+        const name = node.nickname || node.nickName || node.name || '';
+        if (username && name && !seen.has(username)) {
+            seen.add(username);
+            results.push({ name, username });
+        }
+        Object.values(node).forEach(v => {
+            if (v && typeof v === 'object') walk(v, depth + 1);
+        });
+    }
+    walk(data, 0);
+    return results;
+}
+
+// 点选搜索结果，回填昵称与 username
+function pickAuthorCandidate(idx) {
+    const candidate = (window.__radarAuthorCandidates || [])[idx];
+    if (!candidate) return;
+    document.getElementById('radarAuthorName').value = candidate.name;
+    document.getElementById('radarUsername').value = candidate.username;
+    const resultsBox = document.getElementById('radarSearchResults');
+    resultsBox.style.display = 'none';
+    resultsBox.innerHTML = '';
+}
+
+// 启动指定作者的全量下载
+async function startBackfill(username, authorName) {
+    if (!username) return showMessage('缺少视频号ID，无法全量下载', 'warning');
+    try {
+        const response = await fetch('/api/author/backfill/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username, author_name: authorName })
+        });
+        const json = await response.json();
+        if (json.code === 0 || json.code === 200) {
+            showMessage(authorName ? `「${authorName}」全量下载已启动` : '全量下载已启动', 'success');
+            renderBackfillStatus(json.data);
+        } else {
+            showMessage(json.message || '全量下载启动失败', 'error');
+        }
+    } catch (err) {
+        console.error('启动全量下载失败:', err);
+        showMessage('全量下载启动失败，请检查网络', 'error');
+    }
+}
+
+// 停止进行中的全量下载
+async function stopBackfill() {
+    if (!window.__backfillRunningJob) return;
+    try {
+        const response = await fetch('/api/author/backfill/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: window.__backfillRunningJob.username })
+        });
+        const json = await response.json();
+        if (json.code === 0 || json.code === 200) {
+            showMessage('已请求停止全量下载', 'success');
+        } else {
+            showMessage(json.message || '停止失败', 'error');
+        }
+    } catch (err) {
+        console.error('停止全量下载失败:', err);
+    }
+}
+
+// 渲染全量下载任务进度
+function renderBackfillStatus(job) {
+    const card = document.getElementById('backfillStatusCard');
+    if (!card) return;
+    if (!job || job.status !== 'running') {
+        if (job && job.status !== 'running') {
+            // 任务已结束：短暂展示结果后隐藏
+            card.style.display = 'block';
+            window.__backfillRunningJob = null;
+            document.getElementById('backfillStopButton').style.display = 'none';
+            document.getElementById('backfillAuthorName').textContent = job.author_name || job.username;
+            document.getElementById('backfillStatusText').textContent =
+                job.status === 'completed' ? '✅ 已完成' : job.status === 'stopped' ? '⏹ 已停止' : '❌ 失败';
+            document.getElementById('backfillDetailText').textContent =
+                `翻页 ${job.pages_fetched} 页，发现 ${job.found_videos} 个视频，新增入队 ${job.new_videos} 个，跳过已有 ${job.skipped_videos} 个` +
+                (job.last_error ? `（${job.last_error}）` : '');
+            document.getElementById('backfillProgressBar').style.width = '100%';
+            return;
+        }
+        card.style.display = 'none';
+        window.__backfillRunningJob = null;
+        return;
+    }
+
+    window.__backfillRunningJob = job;
+    card.style.display = 'block';
+    document.getElementById('backfillStopButton').style.display = '';
+    document.getElementById('backfillAuthorName').textContent = job.author_name || job.username;
+    document.getElementById('backfillStatusText').textContent = '⏳ 下载中...';
+    document.getElementById('backfillDetailText').textContent =
+        `已翻页 ${job.pages_fetched} 页，发现 ${job.found_videos} 个视频，新增入队 ${job.new_videos} 个，跳过已有 ${job.skipped_videos} 个`;
+    // 无总页数信息，用已发现视频数做相对进度展示（40页为经验满值）
+    const pct = Math.min(95, (job.pages_fetched / 40) * 100);
+    document.getElementById('backfillProgressBar').style.width = pct + '%';
+}
+
+// 拉取全量下载任务状态
+async function refreshBackfillStatus() {
+    try {
+        const response = await fetch('/api/author/backfill/status');
+        if (!response.ok) return;
+        const json = await response.json();
+        if (!(json.code === 0 || json.code === 200)) return;
+        const jobs = json.data || [];
+        const running = jobs.find(j => j.status === 'running');
+        if (running) {
+            renderBackfillStatus(running);
+        } else if (window.__backfillRunningJob) {
+            // 之前的任务结束了，展示其最终状态
+            const finished = jobs.find(j => j.username === window.__backfillRunningJob.username) || jobs[0];
+            if (finished) renderBackfillStatus(finished);
+        }
+    } catch (err) { /* 静默失败，不影响页面其他功能 */ }
 }
 
 // 切换监控状态

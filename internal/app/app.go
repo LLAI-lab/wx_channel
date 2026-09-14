@@ -62,6 +62,7 @@ type App struct {
 	WSHub                  *websocket.Hub
 	SearchService          *api.SearchService
 	RadarService           *services.RadarService  // 自动轮询雷达
+	AuthorBackfillService  *services.AuthorBackfillService // 作者全量视频下载
 	GopeedService          *services.GopeedService // Add GopeedService
 	ArticleArchiveHandler  *handlers.ArticleArchiveHandler
 	CloudConnector         *cloud.Connector
@@ -225,12 +226,16 @@ func (app *App) Run() {
 	radarRepo := database.NewRadarRepository()
 	app.RadarService = services.NewRadarService(radarRepo, queueService, app.WSHub)
 	app.ConsoleAPIHandler = handlers.NewConsoleAPIHandler(app.Cfg, app.WSHub, app.RadarService)
+	app.AuthorBackfillService = services.NewAuthorBackfillService(app.WSHub, queueService)
 
 	// 初始化新的 API 路由器
 	app.RuntimeDiagnostics = api.NewRuntimeDiagnostics(app.Cfg)
 	app.Lifecycle = lifecycle.NewDefaultManagerWithAutoOpen(app.WSHub, app.Cfg.AutoOpenChannels)
 	app.RuntimeDiagnostics.SetLifecycleProvider(app.Lifecycle.Snapshot)
 	app.APIRouter = router.NewAPIRouterWithRuntimeDiagnostics(app.Cfg, app.WSHub, app.Sunny, app.RuntimeDiagnostics)
+	if app.AuthorBackfillService != nil {
+		app.APIRouter.SetAuthorBackfillAPI(api.NewAuthorBackfillAPI(app.AuthorBackfillService))
+	}
 	if app.OfficialAccountService != nil {
 		app.APIRouter.SetOfficialAccountService(app.OfficialAccountService)
 	}
