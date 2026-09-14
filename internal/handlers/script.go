@@ -46,6 +46,14 @@ type ScriptHandler struct {
 
 var officialAccountCSPNoncePattern = regexp.MustCompile(`(?i)(?:'nonce-|nonce-)([^'";\s]+)`)
 
+// JS 引用加版本号的正则，预编译避免每个响应重复编译
+var (
+	jsDepReg        = regexp.MustCompile(`"js/([^"]{1,})\.js"`)
+	jsFromReg       = regexp.MustCompile(`from {0,1}"([^"]{1,})\.js"`)
+	jsLazyImportReg = regexp.MustCompile(`import\("([^"]{1,})\.js"\)`)
+	jsImportReg     = regexp.MustCompile(`import {0,1}"([^"]{1,})\.js"`)
+)
+
 // SetOfficialAccountScript enables the isolated public-account page injection.
 func (h *ScriptHandler) SetOfficialAccountScript(script []byte, origin, token string) {
 	if h == nil {
@@ -232,15 +240,13 @@ func (h *ScriptHandler) HandleJavaScriptResponse(Conn *SunnyNet.HttpConn, host, 
 
 	content := string(body)
 
-	// 添加版本号到JS引用
-	depReg := regexp.MustCompile(`"js/([^"]{1,})\.js"`)
-	fromReg := regexp.MustCompile(`from {0,1}"([^"]{1,})\.js"`)
-	lazyImportReg := regexp.MustCompile(`import\("([^"]{1,})\.js"\)`)
-	importReg := regexp.MustCompile(`import {0,1}"([^"]{1,})\.js"`)
-	content = fromReg.ReplaceAllString(content, `from"$1.js`+h.version+`"`)
-	content = depReg.ReplaceAllString(content, `"js/$1.js`+h.version+`"`)
-	content = lazyImportReg.ReplaceAllString(content, `import("$1.js`+h.version+`")`)
-	content = importReg.ReplaceAllString(content, `import"$1.js`+h.version+`"`)
+	// 添加版本号到JS引用（使用预编译正则，避免每个响应重复编译）
+	if jsFromReg.MatchString(content) || jsDepReg.MatchString(content) {
+		content = jsFromReg.ReplaceAllString(content, `from"$1.js`+h.version+`"`)
+		content = jsDepReg.ReplaceAllString(content, `"js/$1.js`+h.version+`"`)
+		content = jsLazyImportReg.ReplaceAllString(content, `import("$1.js`+h.version+`")`)
+		content = jsImportReg.ReplaceAllString(content, `import"$1.js`+h.version+`"`)
+	}
 	Conn.Response.Header.Set("__debug", "replace_script")
 
 	// 处理不同的JS文件
@@ -696,7 +702,7 @@ func (h *ScriptHandler) getSavePageContentScript() string {
 	};
 	
 	// 定期检查URL变化（适用于SPA）
-	setInterval(checkUrlChange, 1000);
+	setInterval(checkUrlChange, 5000);
 	
 	// 监听历史记录变化
 	window.addEventListener('popstate', () => {
@@ -755,8 +761,8 @@ func (h *ScriptHandler) getVideoCacheNotificationScript() string {
 			console.log('- 视频大小:', (this.videoSize / (1024 * 1024)).toFixed(2) + 'MB');
 			console.log('- 监控间隔: 2秒');
 			
-			// 定期检查缓冲状态 - 增加检查频率
-			this.checkInterval = setInterval(() => this.checkBufferStatus(), 2000);
+			// 定期检查缓冲状态
+			this.checkInterval = setInterval(() => this.checkBufferStatus(), 3000);
 			
 			// 添加可见的缓存状态指示器
 			this.addStatusIndicator();

@@ -133,9 +133,19 @@ func (h *APIHandler) HandleSavePageContent(Conn *SunnyNet.HttpConn) bool {
 		HTML      string `json:"html"`
 		Timestamp int64  `json:"timestamp"`
 	}
-	body, err := io.ReadAll(Conn.Request.Body)
+	// 快照 HTML 通常在数 MB 级别，限制 32MB 防止异常大页面撑爆内存
+	const maxSnapshotBody = 32 << 20
+	body, err := io.ReadAll(io.LimitReader(Conn.Request.Body, maxSnapshotBody+1))
 	if err != nil {
 		utils.HandleError(err, "读取save_page_content请求体")
+		return true
+	}
+	if len(body) > maxSnapshotBody {
+		utils.Warn("save_page_content 请求体超过 32MB，已跳过保存")
+		headers := http.Header{}
+		headers.Set("Content-Type", "application/json")
+		headers.Set("__debug", "fake_resp")
+		Conn.StopRequest(413, `{"code":-1,"message":"页面快照过大，已跳过"}`, headers)
 		return true
 	}
 	if err := Conn.Request.Body.Close(); err != nil {
