@@ -86,6 +86,7 @@ type Config struct {
 
 	// 作者全量下载
 	AuthorBackfillPageDelay int `mapstructure:"author_backfill_page_delay"` // 翻页间隔秒数（防风控）
+	AuthorBackfillMaxPages  int `mapstructure:"author_backfill_max_pages"`  // 单次任务翻页上限（防死循环）
 }
 
 var globalConfig *Config
@@ -252,6 +253,7 @@ func setDefaults() {
 
 	// 作者全量下载默认值
 	viper.SetDefault("author_backfill_page_delay", 2) // 翻页间隔2秒
+	viper.SetDefault("author_backfill_max_pages", 500)
 }
 
 // GetMachineID 获取或生成唯一的机器 ID (稳定硬件特征码)

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"wx_channel/internal/config"
 	"wx_channel/internal/response"
 	"wx_channel/internal/services"
 )
@@ -88,6 +89,48 @@ func (h *AuthorBackfillAPI) Stop(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, nil)
 }
 
+// SettingsGet 获取作者全量下载的运行时配置（翻页上限、间隔）
+func (h *AuthorBackfillAPI) SettingsGet(w http.ResponseWriter, r *http.Request) {
+	cfg := config.Get()
+	response.Success(w, map[string]int{
+		"max_pages":   cfg.AuthorBackfillMaxPages,
+		"page_delay":  cfg.AuthorBackfillPageDelay,
+	})
+}
+
+// SettingsUpdate 更新作者全量下载的运行时配置（立即生效，不影响进行中的任务）
+func (h *AuthorBackfillAPI) SettingsUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		MaxPages  *int `json:"max_pages"`
+		PageDelay *int `json:"page_delay"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "请求参数解析失败")
+		return
+	}
+
+	cfg := config.Get()
+	if req.MaxPages != nil {
+		if *req.MaxPages < 1 || *req.MaxPages > 10000 {
+			response.Error(w, http.StatusBadRequest, "翻页上限需在 1-10000 之间")
+			return
+		}
+		cfg.AuthorBackfillMaxPages = *req.MaxPages
+	}
+	if req.PageDelay != nil {
+		if *req.PageDelay < 1 || *req.PageDelay > 600 {
+			response.Error(w, http.StatusBadRequest, "翻页间隔需在 1-600 秒之间")
+			return
+		}
+		cfg.AuthorBackfillPageDelay = *req.PageDelay
+	}
+
+	response.Success(w, map[string]int{
+		"max_pages":  cfg.AuthorBackfillMaxPages,
+		"page_delay": cfg.AuthorBackfillPageDelay,
+	})
+}
+
 // RegisterRoutes 注册作者全量下载相关的 API 路由
 func (h *AuthorBackfillAPI) RegisterRoutes(mux *http.ServeMux) {
 	for _, prefix := range []string{"/api/author/backfill", "/api/v1/author/backfill"} {
@@ -111,6 +154,16 @@ func (h *AuthorBackfillAPI) RegisterRoutes(mux *http.ServeMux) {
 				return
 			}
 			h.Stop(w, r)
+		})
+		mux.HandleFunc(prefix+"/settings", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				h.SettingsGet(w, r)
+			case http.MethodPut, http.MethodPost:
+				h.SettingsUpdate(w, r)
+			default:
+				response.Error(w, http.StatusMethodNotAllowed, "不允许的请求方法")
+			}
 		})
 	}
 }

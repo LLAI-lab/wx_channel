@@ -23,7 +23,6 @@ type AuthorBackfillService struct {
 }
 
 const (
-	backfillMaxPages       = 500                    // 单次任务翻页上限（防止游标异常导致死循环）
 	backfillMaxVideos      = 50000                  // 单次任务视频总量上限
 	backfillCallTimeout    = 60 * time.Second       // 单次 feed_list 请求超时
 	backfillMaxRetries     = 3                      // 单页请求失败重试次数
@@ -79,6 +78,18 @@ func (s *AuthorBackfillService) pageDelay() time.Duration {
 		delay = 1
 	}
 	return time.Duration(delay) * time.Second
+}
+
+// maxPages 单次任务翻页上限，可经配置 author_backfill_max_pages 调整，范围 1-10000
+func (s *AuthorBackfillService) maxPages() int {
+	maxPages := config.Get().AuthorBackfillMaxPages
+	if maxPages < 1 {
+		maxPages = 1
+	}
+	if maxPages > 10000 {
+		maxPages = 10000
+	}
+	return maxPages
 }
 
 // Start 启动（或复用）指定作者的全量下载任务
@@ -172,8 +183,8 @@ func (s *AuthorBackfillService) run(handle *backfillJobHandle) {
 		default:
 		}
 
-		if handle.job.PagesFetched >= backfillMaxPages {
-			s.finishJob(handle, BackfillStatusFailed, fmt.Sprintf("已达单次任务翻页上限(%d页)，如未拉取完成可再次执行", backfillMaxPages))
+		if handle.job.PagesFetched >= s.maxPages() {
+			s.finishJob(handle, BackfillStatusFailed, fmt.Sprintf("已达单次任务翻页上限(%d页)，如未拉取完成可再次执行", s.maxPages()))
 			return
 		}
 		if handle.job.FoundVideos >= backfillMaxVideos {

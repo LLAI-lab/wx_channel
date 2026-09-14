@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.dataset.page === 'radar') {
                 loadRadarTargets();
                 refreshBackfillStatus();
+                loadBackfillSettings();
             }
         });
     });
@@ -375,12 +376,15 @@ async function stopBackfill() {
 function renderBackfillStatus(job) {
     const card = document.getElementById('backfillStatusCard');
     if (!card) return;
+    const resumeBtn = document.getElementById('backfillResumeButton');
     if (!job || job.status !== 'running') {
-        if (job && job.status !== 'running') {
-            // 任务已结束：短暂展示结果后隐藏
+        if (job) {
+            // 任务已结束：展示结果并提供"再次拉取"按钮
             card.style.display = 'block';
             window.__backfillRunningJob = null;
+            window.__backfillLastJob = job;
             document.getElementById('backfillStopButton').style.display = 'none';
+            if (resumeBtn) resumeBtn.style.display = '';
             document.getElementById('backfillAuthorName').textContent = job.author_name || job.username;
             document.getElementById('backfillStatusText').textContent =
                 job.status === 'completed' ? '✅ 已完成' : job.status === 'stopped' ? '⏹ 已停止' : '❌ 失败';
@@ -396,15 +400,70 @@ function renderBackfillStatus(job) {
     }
 
     window.__backfillRunningJob = job;
+    window.__backfillLastJob = job;
     card.style.display = 'block';
     document.getElementById('backfillStopButton').style.display = '';
+    if (resumeBtn) resumeBtn.style.display = 'none';
     document.getElementById('backfillAuthorName').textContent = job.author_name || job.username;
     document.getElementById('backfillStatusText').textContent = '⏳ 下载中...';
     document.getElementById('backfillDetailText').textContent =
         `已翻页 ${job.pages_fetched} 页，发现 ${job.found_videos} 个视频，新增入队 ${job.new_videos} 个，跳过已有 ${job.skipped_videos} 个`;
-    // 无总页数信息，用已发现视频数做相对进度展示（40页为经验满值）
-    const pct = Math.min(95, (job.pages_fetched / 40) * 100);
+    // 无总页数信息，用已翻页数做相对进度展示（当前配置上限为经验满值）
+    const maxPages = window.__backfillSettings ? (window.__backfillSettings.max_pages || 500) : 500;
+    const pct = Math.min(95, (job.pages_fetched / maxPages) * 100);
     document.getElementById('backfillProgressBar').style.width = pct + '%';
+}
+
+// 对最近一次结束的任务重新发起全量拉取（已下载的视频会自动跳过）
+async function startBackfillFromJob() {
+    const job = window.__backfillLastJob;
+    if (!job) return showMessage('没有可继续的任务', 'warning');
+    await startBackfill(job.username, job.author_name);
+}
+
+// 加载全量下载设置（翻页上限、间隔）
+async function loadBackfillSettings() {
+    try {
+        const response = await fetch('/api/author/backfill/settings');
+        if (!response.ok) return;
+        const json = await response.json();
+        if (!(json.code === 0 || json.code === 200)) return;
+        window.__backfillSettings = json.data || {};
+        const maxPagesInput = document.getElementById('backfillMaxPagesInput');
+        const pageDelayInput = document.getElementById('backfillPageDelayInput');
+        if (maxPagesInput && window.__backfillSettings.max_pages) {
+            maxPagesInput.value = window.__backfillSettings.max_pages;
+        }
+        if (pageDelayInput && window.__backfillSettings.page_delay) {
+            pageDelayInput.value = window.__backfillSettings.page_delay;
+        }
+    } catch (err) { /* 静默失败 */ }
+}
+
+// 保存全量下载设置
+async function saveBackfillSettings() {
+    const maxPages = parseInt(document.getElementById('backfillMaxPagesInput').value, 10);
+    const pageDelay = parseInt(document.getElementById('backfillPageDelayInput').value, 10);
+    if (!(maxPages >= 1 && maxPages <= 10000)) return showMessage('翻页上限需在 1-10000 之间', 'warning');
+    if (!(pageDelay >= 1 && pageDelay <= 600)) return showMessage('翻页间隔需在 1-600 秒之间', 'warning');
+
+    try {
+        const response = await fetch('/api/author/backfill/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ max_pages: maxPages, page_delay: pageDelay })
+        });
+        const json = await response.json();
+        if (json.code === 0 || json.code === 200) {
+            window.__backfillSettings = json.data || {};
+            showMessage(`设置已保存：翻页上限 ${json.data.max_pages} 页，间隔 ${json.data.page_delay} 秒`, 'success');
+        } else {
+            showMessage(json.message || '保存失败', 'error');
+        }
+    } catch (err) {
+        console.error('保存全量下载设置失败:', err);
+        showMessage('保存失败，请检查网络', 'error');
+    }
 }
 
 // 拉取全量下载任务状态
