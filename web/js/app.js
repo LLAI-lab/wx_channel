@@ -3161,11 +3161,11 @@
                         return;
                     }
                     
-                    // Update progress from currentTask
+                    // Update progress from currentTask（仅更新数据不重建 DOM，防止高频重渲染导致页面内存溢出）
                     if (progress.currentTask && progress.currentTask.progress) {
                         const percent = progress.currentTask.progress;
                         item.downloadedSize = Math.floor((percent / 100) * item.totalSize);
-                        renderQueueList();
+                        updateQueueStats();
                     }
                     
                     lastDone = progress.done;

@@ -709,40 +709,37 @@ async function checkAndUpdateCompletedQueueItems() {
     }
 
     try {
-        // 批量检查这些任务是否已在下载记录中
-        for (const item of pendingItems) {
+        // 批量对比：一次拉取下载记录列表，用已完成集合标记队列中的同名任务。
+        // 之前对每条任务单独发请求（2000+ 个请求），大量 Promise 堆积导致页面内存溢出。
+        // 拉取最近完成的下载记录（API 分页上限 100）
+        const result = await ApiClient.getDownloadRecords({ page: 1, page_size: 100, status: 'completed' });
+        if (!result || !result.success) {
+            return;
+        }
+        const records = result.data?.items || [];
+        const completedVideoIds = new Set(
+            records.filter(r => r.status === 'completed').map(r => String(r.videoId))
+        );
+        if (completedVideoIds.size === 0) {
+            return;
+        }
+
+        const toComplete = pendingItems.filter(item => completedVideoIds.has(String(item.videoId || item.id)));
+        for (const item of toComplete) {
             try {
-                // 通过videoId查询下载记录
-                const downloadRecord = await ApiClient.getDownloadRecord(item.videoId || item.id);
-                if (downloadRecord && downloadRecord.success && downloadRecord.data) {
-                    const record = downloadRecord.data;
-                    // 如果下载记录存在且状态为completed，更新队列状态
-                    if (record.status === 'completed') {
-                        console.log(`检测到队列任务已完成: ${item.title}，自动更新状态`);
-                        await ApiClient.completeDownload(item.id);
-                        // 更新本地状态
-                        item.status = 'completed';
-                        item.downloadedSize = item.totalSize;
-                    }
-                }
-            } catch (e) {
-                // 忽略单个任务的检查错误（可能是记录不存在）
-                // console.log(`检查任务 ${item.title} 失败:`, e.message);
-            }
+                await ApiClient.completeDownload(item.id);
+                item.status = 'completed';
+                item.downloadedSize = item.totalSize;
+            } catch (e) { /* 忽略单个失败 */ }
+        }
+        if (toComplete.length > 0) {
+            console.log(`批量检测到 ${toComplete.length} 个队列任务已完成，自动更新状态`);
         }
     } catch (e) {
-        console.error('Failed to check completed queue items:', e);
+        // 忽略整体检查错误
     }
 }
 
-// 批量下载进度轮询（用于下载队列页面）
-window.queueBatchProgressInterval = null;
-
-// 防止重复请求的标志
-let batchProgressCheckInProgress = false;
-let lastBatchProgressCheck = null;
-
-// 检测并显示批量下载进度
 async function checkAndShowBatchProgress() {
     // 如果正在检查中，跳过
     if (batchProgressCheckInProgress) {
