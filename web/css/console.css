@@ -2546,3 +2546,15 @@
                 grid-template-columns: 1fr;
             }
         }
+/* 队列状态筛选按钮 */
+.queue-filter-btn {
+    opacity: 0.75;
+    border: 1px solid var(--border-color);
+}
+
+.queue-filter-btn.active {
+    opacity: 1;
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}

@@ -1217,8 +1217,32 @@ async function updateQueueBatchProgress() {
 }
 
 // Render queue list with drag-and-drop support - Requirements: 10.1, 10.4
+// 队列状态筛选：all/pending/downloading/paused/failed/completed
+let queueFilter = 'all';
+
+function setQueueFilter(filter) {
+    queueFilter = filter;
+    document.querySelectorAll('.queue-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    renderQueueList();
+}
+
+function getFilteredQueueItems() {
+    if (!queueState.items) return [];
+    if (queueFilter === 'all') return queueState.items;
+    return queueState.items.filter(item => item.status === queueFilter);
+}
+
 function renderQueueList() {
     const container = document.getElementById('downloadQueueList');
+    const items = getFilteredQueueItems();
+    const countText = document.getElementById('queueFilterCount');
+    if (countText) {
+        countText.textContent = (queueFilter === 'all')
+            ? `共 ${queueState.items ? queueState.items.length : 0} 项`
+            : `筛选出 ${items.length} 项`;
+    }
 
     if (!queueState.items || queueState.items.length === 0) {
         container.innerHTML = `
@@ -1235,9 +1259,23 @@ function renderQueueList() {
         return;
     }
 
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div class="queue-empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <p>没有符合筛选条件的任务</p>
+            </div>
+        `;
+        return;
+    }
+
     let html = '';
-    for (let i = 0; i < queueState.items.length; i++) {
-        const item = queueState.items[i];
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         html += renderQueueItem(item, i);
     }
 
@@ -1271,6 +1309,14 @@ function renderQueueItem(item, index) {
              ondragleave="handleDragLeave(event)"
              ondrop="handleDrop(event, ${index})">
             
+            <!-- Selection Checkbox -->
+            <div style="flex-shrink: 0; display: flex; align-items: center; padding-right: 4px;">
+                <input type="checkbox" class="queue-item-checkbox" data-id="${escapeHtml(item.id)}"
+                    onchange="updateStartSelectedButton()"
+                    title="勾选后可批量开始下载"
+                    style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary-color);">
+            </div>
+
             <!-- Drag Handle - Requirements: 10.4 -->
             <div class="queue-item-drag-handle" title="拖拽排序">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1746,12 +1792,13 @@ async function pauseAllDownloads() {
     }
 }
 
-// Resume all downloads (handles both paused and pending items)
+// Resume all downloads (handles paused, pending and failed items)
 async function resumeAllDownloads() {
     const pausedItems = queueState.items.filter(i => i.status === 'paused');
     const pendingItems = queueState.items.filter(i => i.status === 'pending');
+    const failedItems = queueState.items.filter(i => i.status === 'failed');
 
-    if (pausedItems.length === 0 && pendingItems.length === 0) {
+    if (pausedItems.length === 0 && pendingItems.length === 0 && failedItems.length === 0) {
         showMessage('没有可启动的下载任务', 'info');
         return;
     }
@@ -1771,7 +1818,20 @@ async function resumeAllDownloads() {
         }
     }
 
-    // 2. 批量启动待下载任务（一次性提交给 batch 下载器）
+    // 2. 重试失败的任务（复用暂停恢复接口重新入队）
+    if (failedItems.length > 0) {
+        try {
+            for (const item of failedItems) {
+                await ApiClient.resumeDownload(item.id);
+                item.status = 'pending';
+                started++;
+            }
+        } catch (e) {
+            showMessage('重试失败任务出错: ' + e.message, 'error');
+        }
+    }
+
+    // 3. 批量启动待下载任务（一次性提交给 batch 下载器）
     if (pendingItems.length > 0) {
         // 过滤掉没有 URL 或 decryptKey 的任务
         const readyItems = pendingItems.filter(i => i.videoUrl && i.decryptKey);
@@ -1815,7 +1875,94 @@ async function resumeAllDownloads() {
     }
 }
 
-// Clear completed items from queue
+// 全部开始（原"全部恢复"更名）：开始全部等待中/已暂停/失败的任务
+async function startAllQueueItems() {
+    await resumeAllDownloads();
+}
+
+// 获取勾选的队列项（含已选 ID，跨渲染保持）
+function getSelectedQueueIds() {
+    return Array.from(document.querySelectorAll('.queue-item-checkbox:checked'))
+        .map(cb => cb.dataset.id);
+}
+
+// 勾选变化时更新"开始"按钮的可见性与文本
+function updateStartSelectedButton() {
+    const btn = document.getElementById('startSelectedBtn');
+    if (!btn) return;
+    const count = getSelectedQueueIds().length;
+    btn.style.display = count > 0 ? '' : 'none';
+    btn.textContent = count > 0 ? `开始 (${count})` : '开始';
+}
+
+// 开始勾选的任务（等待中/已暂停/失败均可）
+async function startSelectedQueueItems() {
+    const ids = getSelectedQueueIds();
+    if (ids.length === 0) {
+        showMessage('请先勾选要开始的任务', 'warning');
+        return;
+    }
+
+    const selected = queueState.items.filter(i => ids.includes(i.id));
+    const pausableItems = selected.filter(i => i.status === 'paused' || i.status === 'failed');
+    const pendingItems = selected.filter(i => i.status === 'pending');
+    const skippedStatus = selected.filter(i => ['downloading', 'completed'].includes(i.status));
+
+    if (skippedStatus.length > 0) {
+        showMessage(`${skippedStatus.length} 个任务正在下载或已完成，已跳过`, 'info');
+    }
+
+    let started = 0;
+
+    // 1. 恢复暂停/失败的任务
+    for (const item of pausableItems) {
+        try {
+            await ApiClient.resumeDownload(item.id);
+            item.status = 'pending';
+            started++;
+        } catch (e) {
+            showMessage(`「${(item.title || '').slice(0, 20)}」恢复失败: ${e.message}`, 'error');
+        }
+    }
+
+    // 2. 批量启动等待中的任务
+    if (pendingItems.length > 0) {
+        const readyItems = pendingItems.filter(i => i.videoUrl && i.decryptKey);
+        const missingKey = pendingItems.filter(i => !i.decryptKey);
+        if (missingKey.length > 0) {
+            showMessage(`${missingKey.length} 个任务缺少解密密钥，已跳过`, 'warning');
+        }
+        if (readyItems.length > 0) {
+            try {
+                const videos = readyItems.map(item => ({
+                    id: item.videoId || item.id,
+                    title: item.title,
+                    url: item.videoUrl,
+                    authorName: item.author,
+                    key: item.decryptKey
+                }));
+                const result = await ApiClient.startBatchDownload(videos, false);
+                if (result.success) {
+                    readyItems.forEach(item => item.status = 'downloading');
+                    started += readyItems.length;
+                    if (readyItems.length > 0) {
+                        pollBatchProgress(readyItems[0].id);
+                    }
+                } else {
+                    showMessage('批量下载启动失败: ' + (result.error || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showMessage('启动下载失败: ' + e.message, 'error');
+            }
+        }
+    }
+
+    if (started > 0) {
+        showMessage(`已开始 ${started} 个下载任务`, 'success');
+        renderQueueList();
+        updateQueueStats();
+    }
+}
 async function clearCompletedQueue() {
     const completedItems = queueState.items.filter(i => i.status === 'completed');
     if (completedItems.length === 0) {
