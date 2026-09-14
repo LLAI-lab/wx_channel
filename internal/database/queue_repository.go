@@ -62,7 +62,7 @@ func (r *QueueRepository) GetByID(id string) (*QueueItem, error) {
 	var coverURL sql.NullString
 	var resolution sql.NullString
 	err := r.db.QueryRow(query, id).Scan(
-		&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &item.UploadTime,
+		&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &uploadTime,
 		&item.Duration, &resolution, &item.TotalSize, &item.DownloadedSize, &item.Status, &item.Priority,
 		&item.AddedTime, &startTime, &item.Speed, &item.ChunkSize,
 		&item.ChunksTotal, &item.ChunksCompleted, &item.RetryCount,
@@ -105,7 +105,7 @@ func (r *QueueRepository) GetByVideoID(videoID string) (*QueueItem, error) {
 	var coverURL sql.NullString
 	var resolution sql.NullString
 	err := r.db.QueryRow(query, videoID).Scan(
-		&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &item.UploadTime,
+		&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &uploadTime,
 		&item.Duration, &resolution, &item.TotalSize, &item.DownloadedSize, &item.Status, &item.Priority,
 		&item.AddedTime, &startTime, &item.Speed, &item.ChunkSize,
 		&item.ChunksTotal, &item.ChunksCompleted, &item.RetryCount,
@@ -230,7 +230,7 @@ func (r *QueueRepository) List() ([]QueueItem, error) {
 		var uploadTime sql.NullTime
 		var coverURL sql.NullString
 		err := rows.Scan(
-			&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &item.UploadTime,
+			&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &uploadTime,
 			&item.Duration, &item.TotalSize, &item.DownloadedSize, &item.Status, &item.Priority,
 			&item.AddedTime, &startTime, &item.Speed, &item.ChunkSize,
 			&item.ChunksTotal, &item.ChunksCompleted, &item.RetryCount,
@@ -289,7 +289,7 @@ func (r *QueueRepository) ListByStatus(status string) ([]QueueItem, error) {
 		var uploadTime sql.NullTime
 		var coverURL sql.NullString
 		err := rows.Scan(
-			&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &item.UploadTime,
+			&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &uploadTime,
 			&item.Duration, &item.TotalSize, &item.DownloadedSize, &item.Status, &item.Priority,
 			&item.AddedTime, &startTime, &item.Speed, &item.ChunkSize,
 			&item.ChunksTotal, &item.ChunksCompleted, &item.RetryCount,
@@ -449,7 +449,7 @@ func (r *QueueRepository) GetNextPending() (*QueueItem, error) {
 	var uploadTime sql.NullTime
 	var coverURL sql.NullString
 	err := r.db.QueryRow(query, QueueStatusPending).Scan(
-		&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &item.UploadTime,
+		&item.ID, &item.VideoID, &item.Title, &item.Author, &coverURL, &item.VideoURL, &decryptKey, &uploadTime,
 		&item.Duration, &item.TotalSize, &item.DownloadedSize, &item.Status, &item.Priority,
 		&item.AddedTime, &startTime, &item.Speed, &item.ChunkSize,
 		&item.ChunksTotal, &item.ChunksCompleted, &item.RetryCount,
