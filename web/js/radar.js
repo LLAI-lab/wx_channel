@@ -295,7 +295,7 @@ async function searchAuthorByNickname() {
 function extractAuthorCandidates(data) {
     const seen = new Set();
     const results = [];
-    const rawUsername = (u) => (typeof u === 'string' && /^v2_[A-Za-z0-9_+\-=/]+$/.test(u)) ? u : '';
+    const rawUsername = (u) => (typeof u === 'string' && /^v2_[A-Za-z0-9_+\-=/@.]+$/.test(u)) ? u : '';
 
     function walk(node, depth) {
         if (!node || depth > 8 || results.length >= 20) return;
