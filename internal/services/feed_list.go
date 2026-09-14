@@ -3,6 +3,8 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	"wx_channel/internal/database"
 )
@@ -17,6 +19,7 @@ type FeedListVideo struct {
 	Size       int64
 	Duration   int64
 	Resolution string
+	CreateTime time.Time // 视频在视频号上的发布时间
 }
 
 // feedListResponse 与视频号网页端 finderUserPage 返回结构对应
@@ -56,6 +59,18 @@ func ParseFeedListResponse(data []byte) (videos []FeedListVideo, lastBuffer stri
 			continue
 		}
 		video := FeedListVideo{VideoID: fmt.Sprintf("%v", idInter)}
+
+		// 提取视频发布时间（createtime 为 Unix 秒，可能是数字或字符串）
+		switch t := objMap["createtime"].(type) {
+		case float64:
+			if t > 0 {
+				video.CreateTime = time.Unix(int64(t), 0)
+			}
+		case string:
+			if v, err := strconv.ParseInt(t, 10, 64); err == nil && v > 0 {
+				video.CreateTime = time.Unix(v, 0)
+			}
+		}
 
 		if descInter, ok := objMap["objectDesc"]; ok {
 			if descMap, ok := descInter.(map[string]interface{}); ok {

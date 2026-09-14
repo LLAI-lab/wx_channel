@@ -1331,6 +1331,7 @@ function renderQueueItem(item, index) {
                 <div class="queue-item-title" title="${escapeHtml(item.title || '无标题')}">${escapeHtml(item.title || '无标题')}</div>
                 <div class="queue-item-meta">
                     <span>${escapeHtml(item.author || '未知作者')}</span>
+                    ${formatUploadTime(item.uploadTime) ? `<span title="视频在视频号上的发布时间">发布: ${formatUploadTime(item.uploadTime)}</span>` : ''}
                     ${item.totalSize ? `<span>${totalText}</span>` : ''}
                 </div>
             </div>
@@ -1408,6 +1409,42 @@ function getQueueStatusText(status) {
         'failed': '失败'
     };
     return statusMap[status] || status || '未知';
+}
+
+// 格式化视频发布时间（上传时间），无有效时间时返回空串
+function formatUploadTime(timeStr) {
+    if (!timeStr) return '';
+    const t = new Date(timeStr);
+    if (isNaN(t.getTime()) || t.getFullYear() < 2000) return '';
+    return t.toLocaleString();
+}
+
+// 补取缺解密密钥队列项的密钥（可传指定 ID，不传则扫描全部缺密钥项）
+async function recoverDecryptKeys(ids) {
+    try {
+        const response = await fetch('/api/author/backfill/recover_keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ids && ids.length ? { ids: ids } : {})
+        });
+        const json = await response.json();
+        if (json.code === 0 || json.code === 200) {
+            const d = json.data || {};
+            if (d.scanned === 0) {
+                showMessage('没有缺解密密钥的任务', 'info');
+            } else if (d.recovered > 0) {
+                showMessage(`补取成功 ${d.recovered} 个` + (d.failed > 0 ? `，失败 ${d.failed} 个（需要微信页面在线）` : ''), d.failed > 0 ? 'warning' : 'success');
+            } else {
+                showMessage(`补取失败 ${d.failed} 个：需要微信视频号页面在线，且页面能加载到视频数据`, 'error');
+            }
+            loadDownloadQueue();
+        } else {
+            showMessage(json.message || '补取失败', 'error');
+        }
+    } catch (err) {
+        console.error('补取解密密钥失败:', err);
+        showMessage('补取请求失败，请检查网络', 'error');
+    }
 }
 
 // Calculate progress percentage

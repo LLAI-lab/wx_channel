@@ -68,6 +68,7 @@ type QueueItem struct {
 	CoverURL        string    `json:"coverUrl"` // 封面图片 URL
 	VideoURL        string    `json:"videoUrl"`
 	DecryptKey      string    `json:"decryptKey"` // 加密视频的解密密钥
+	UploadTime      time.Time `json:"uploadTime"` // 视频在视频号上的发布时间（用于排序）
 	Duration        int64     `json:"duration"`   // 视频时长（秒）
 	Resolution      string    `json:"resolution"` // 视频分辨率（例如 "1080p"）
 	TotalSize       int64     `json:"totalSize"`

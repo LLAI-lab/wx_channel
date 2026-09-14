@@ -295,6 +295,7 @@ func (s *AuthorBackfillService) enqueueVideos(handle *backfillJobHandle, videos 
 			VideoID:    video.VideoID,
 			Title:      title,
 			Author:     handle.job.AuthorName,
+			UploadTime: video.CreateTime,
 			VideoURL:   video.VideoURL,
 			CoverURL:   video.CoverURL,
 			Size:       video.Size,

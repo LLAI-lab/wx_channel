@@ -234,7 +234,7 @@ func (app *App) Run() {
 	app.RuntimeDiagnostics.SetLifecycleProvider(app.Lifecycle.Snapshot)
 	app.APIRouter = router.NewAPIRouterWithRuntimeDiagnostics(app.Cfg, app.WSHub, app.Sunny, app.RuntimeDiagnostics)
 	if app.AuthorBackfillService != nil {
-		app.APIRouter.SetAuthorBackfillAPI(api.NewAuthorBackfillAPI(app.AuthorBackfillService))
+		app.APIRouter.SetAuthorBackfillAPI(api.NewAuthorBackfillAPI(app.AuthorBackfillService, app.WSHub))
 	}
 	if app.OfficialAccountService != nil {
 		app.APIRouter.SetOfficialAccountService(app.OfficialAccountService)

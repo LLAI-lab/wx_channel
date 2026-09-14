@@ -518,6 +518,13 @@ ALTER TABLE mp_articles ADD COLUMN malicious_content_type INTEGER NOT NULL DEFAU
 ALTER TABLE mp_articles ADD COLUMN video_id TEXT NOT NULL DEFAULT '';
 `,
 	},
+	{
+		Version:     21,
+		Description: "Add upload_time column to queue table for video publish ordering",
+		Up: `
+ALTER TABLE download_queue ADD COLUMN upload_time DATETIME NULL;
+`,
+	},
 }
 
 // runMigrations 执行所有待处理的迁移

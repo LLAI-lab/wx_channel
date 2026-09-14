@@ -29,13 +29,14 @@ func NewQueueService() *QueueService {
 
 // VideoInfo 表示要添加到队列的视频信息
 type VideoInfo struct {
-	VideoID    string `json:"videoId"`
-	Title      string `json:"title"`
-	Author     string `json:"author"`
-	CoverURL   string `json:"coverUrl"`
-	VideoURL   string `json:"videoUrl"`
-	DecryptKey string `json:"decryptKey"`
-	Duration   int64  `json:"duration"`
+	VideoID    string    `json:"videoId"`
+	Title      string    `json:"title"`
+	Author     string    `json:"author"`
+	UploadTime time.Time `json:"uploadTime,omitempty"` // 视频发布时间
+	CoverURL   string    `json:"coverUrl"`
+	VideoURL   string    `json:"videoUrl"`
+	DecryptKey string    `json:"decryptKey"`
+	Duration   int64     `json:"duration"`
 	Resolution string `json:"resolution"`
 	Size       int64  `json:"size"`
 	CreateTime string `json:"createTime,omitempty"`
@@ -75,6 +76,7 @@ func (s *QueueService) AddToQueue(videos []VideoInfo) ([]database.QueueItem, err
 			VideoID:         video.VideoID,
 			Title:           video.Title,
 			Author:          video.Author,
+			UploadTime:      video.UploadTime,
 			CoverURL:        video.CoverURL,
 			VideoURL:        video.VideoURL,
 			DecryptKey:      video.DecryptKey,
