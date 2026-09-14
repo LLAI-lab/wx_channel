@@ -233,6 +233,7 @@ func (app *App) Run() {
 	app.Lifecycle = lifecycle.NewDefaultManagerWithAutoOpen(app.WSHub, app.Cfg.AutoOpenChannels)
 	app.RuntimeDiagnostics.SetLifecycleProvider(app.Lifecycle.Snapshot)
 	app.APIRouter = router.NewAPIRouterWithRuntimeDiagnostics(app.Cfg, app.WSHub, app.Sunny, app.RuntimeDiagnostics)
+	app.APIRouter.SetRadarService(app.RadarService)
 	if app.AuthorBackfillService != nil {
 		app.APIRouter.SetAuthorBackfillAPI(api.NewAuthorBackfillAPI(app.AuthorBackfillService, app.WSHub))
 	}

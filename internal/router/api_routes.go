@@ -7,6 +7,7 @@ import (
 	"wx_channel/internal/config"
 	"wx_channel/internal/handlers"
 	"wx_channel/internal/officialaccount"
+	"wx_channel/internal/services"
 	"wx_channel/internal/websocket"
 
 	"strings"
@@ -43,6 +44,14 @@ func (r *APIRouter) SetOfficialAccountService(service *officialaccount.Service) 
 	r.officialAccountService = service
 	service.RegisterRoutes(r.mux)
 	r.officialAccountRoutesRegistered = true
+}
+
+// SetRadarService injects the radar service for manual check triggers.
+func (r *APIRouter) SetRadarService(service *services.RadarService) {
+	if r == nil || service == nil || r.radarAPI == nil {
+		return
+	}
+	r.radarAPI.SetRadarService(service)
 }
 
 // SetAuthorBackfillAPI mounts the author full-download API. Optional so the

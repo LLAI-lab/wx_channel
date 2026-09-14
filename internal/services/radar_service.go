@@ -143,6 +143,36 @@ func (s *RadarService) checkTargets() {
 	}
 }
 
+// CheckNow 手动触发指定目标的立即检测（不受轮询间隔限制）
+func (s *RadarService) CheckNow(targetID string) (*database.RadarLog, error) {
+	target, err := s.repo.GetByID(targetID)
+	if err != nil {
+		return nil, fmt.Errorf("读取监控目标失败: %w", err)
+	}
+	if target == nil {
+		return nil, fmt.Errorf("监控目标不存在: %s", targetID)
+	}
+	if s.hub == nil || s.hub.ClientCount() == 0 {
+		now := time.Now()
+		_ = s.repo.UpdateLastCheckTime(target.ID, now)
+		_ = s.repo.AddLog(&database.RadarLog{
+			TargetID:     target.ID,
+			CheckTime:    now,
+			Status:       "error",
+			ErrorMessage: "微信客户端未连接或被关闭，请重新注入",
+		})
+		return nil, fmt.Errorf("微信客户端未连接或被关闭，请重新注入")
+	}
+
+	s.processTarget(*target)
+
+	logs, err := s.repo.GetLogsByTargetID(target.ID, 1)
+	if err != nil || len(logs) == 0 {
+		return nil, nil
+	}
+	return &logs[0], nil
+}
+
 // processTarget 处理单个雷达监控目标的拉取与对比逻辑
 func (s *RadarService) processTarget(target database.RadarTarget) {
 	utils.LogInfo("[Radar] 开始检测账号: %s (%s)", target.AuthorName, target.Username)

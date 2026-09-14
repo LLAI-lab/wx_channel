@@ -7,11 +7,13 @@ import (
 
 	"wx_channel/internal/database"
 	"wx_channel/internal/response"
+	"wx_channel/internal/services"
 )
 
 // RadarServiceAPI 处理雷达监控相关的 API
 type RadarServiceAPI struct {
-	repo *database.RadarRepository
+	repo    *database.RadarRepository
+	service *services.RadarService
 }
 
 // NewRadarServiceAPI 创建雷达服务 API 处理器
@@ -19,6 +21,33 @@ func NewRadarServiceAPI() *RadarServiceAPI {
 	return &RadarServiceAPI{
 		repo: database.NewRadarRepository(),
 	}
+}
+
+// SetRadarService 注入雷达服务，用于手动触发检测
+func (h *RadarServiceAPI) SetRadarService(service *services.RadarService) {
+	h.service = service
+}
+
+// CheckNow 手动触发指定目标的立即检测
+func (h *RadarServiceAPI) CheckNow(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		response.Error(w, http.StatusServiceUnavailable, "雷达服务未初始化")
+		return
+	}
+	pathParts := strings.Split(r.URL.Path, "/")
+	// /api/v1/radar/targets/{id}/check_now
+	if len(pathParts) < 2 {
+		response.Error(w, http.StatusBadRequest, "无效的请求路径")
+		return
+	}
+	id := pathParts[len(pathParts)-2]
+
+	log, err := h.service.CheckNow(id)
+	if err != nil {
+		response.Error(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	response.Success(w, log)
 }
 
 // GetTargets 获取所有监控目标
@@ -194,6 +223,10 @@ func (h *RadarServiceAPI) RegisterRoutes(mux *http.ServeMux) {
 		}
 		if strings.HasSuffix(path, "/logs") && r.Method == http.MethodGet {
 			h.GetRadarLogs(w, r)
+			return
+		}
+		if strings.HasSuffix(path, "/check_now") && r.Method == http.MethodPost {
+			h.CheckNow(w, r)
 			return
 		}
 

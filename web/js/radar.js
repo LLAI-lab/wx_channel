@@ -126,11 +126,12 @@ function renderRadarTable() {
                 <td><span style="font-size: 13px; color: var(--text-muted);">${lastCheck}</span></td>
                 <td><span class="${statusClass}" style="font-weight: 500;">${statusText}</span></td>
                 <td>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 6px; align-items: center;">
                         ${target.status === 'active'
                 ? `<button class="btn btn-secondary" onclick="toggleRadarStatus('${target.id}', 'paused')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">暂停</button>`
                 : `<button class="btn btn-primary" onclick="toggleRadarStatus('${target.id}', 'active')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">恢复</button>`
             }
+                        <button class="btn btn-secondary" onclick="checkRadarNow('${target.id}', '${escapeHtml(target.author_name)}', this)" title="立即检测一次该博主的新视频（不受轮询间隔限制）" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">监测</button>
                         <button class="btn btn-secondary" onclick="startBackfill('${target.username}', '${escapeHtml(target.author_name)}')" title="翻页拉取该作者全部历史视频并加入下载队列" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">下载全部</button>
                         <button class="btn btn-secondary" onclick="editRadarTarget('${target.id}')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">编辑</button>
                         <button class="btn btn-secondary" onclick="showRadarLogs('${target.id}', '${escapeHtml(target.author_name)}')" style="padding: 4px 8px; font-size: 13px; flex-shrink: 0;">详情</button>
@@ -483,6 +484,41 @@ async function refreshBackfillStatus() {
             if (finished) renderBackfillStatus(finished);
         }
     } catch (err) { /* 静默失败，不影响页面其他功能 */ }
+}
+
+// 手动触发一次立即检测（不受轮询间隔限制）
+async function checkRadarNow(id, authorName, btn) {
+    const originalText = btn ? btn.textContent : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '检测中';
+    }
+    try {
+        const response = await fetch(`/api/v1/radar/targets/${id}/check_now`, { method: 'POST' });
+        const json = await response.json();
+        if (json.code === 0 || json.code === 200) {
+            const log = json.data;
+            if (log && log.status === 'success') {
+                showMessage(`${authorName} 检测完成：发现 ${log.found_videos} 个视频，新增 ${log.new_videos} 个已入队`,
+                    log.new_videos > 0 ? 'success' : 'info');
+            } else if (log && log.status === 'error') {
+                showMessage(`${authorName} 检测失败：${log.error_message || '未知错误'}`, 'error');
+            } else {
+                showMessage(`${authorName} 检测完成`, 'info');
+            }
+            loadRadarTargets();
+        } else {
+            showMessage(json.message || '检测失败', 'error');
+        }
+    } catch (err) {
+        console.error('手动检测失败:', err);
+        showMessage('检测请求失败，请检查网络', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
 }
 
 // 切换监控状态
