@@ -2007,6 +2007,9 @@ function updateQueueItemProgress(progressData) {
 // Batch Download Functions
 // ============================================
 let batchProgressInterval = null;
+// 批量进度检查互斥标记（防止并发检查堆积）
+let batchProgressCheckInProgress = false;
+let lastBatchProgressCheck = null;
 
 function clearSharedFeedInputs() {
     const input = document.getElementById('sharedFeedUrlList');
