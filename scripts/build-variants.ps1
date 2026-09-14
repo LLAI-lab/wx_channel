@@ -137,7 +137,9 @@ function Invoke-GoBuild {
         if (Test-Path $OutputName) {
             Remove-Item $OutputName -Force
         }
-        go build -mod=vendor "-ldflags=$ldflags" -o $OutputName
+        # nosqlite: gopeed 的 BT 存储层与 mattn/go-sqlite3 引入两套 sqlite C 实现，
+        # 静态链接时符号冲突；nosqlite 让 BT 存储回退到 boltdb，避开冲突。
+        go build -mod=vendor -tags nosqlite "-ldflags=$ldflags" -o $OutputName
         Assert-LastExitCode -CommandName ("go build -o " + $OutputName)
     }
     finally {
