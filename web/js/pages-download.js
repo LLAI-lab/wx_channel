@@ -676,6 +676,7 @@ async function loadDownloadQueue() {
 
         if (result.success) {
             queueState.items = result.data || [];
+            window.__queueRenderPage = 1;
 
             // 检查pending状态的任务是否已经下载完成
             // 如果已完成，自动更新队列状态
@@ -1017,122 +1018,45 @@ async function updateQueueBatchProgress() {
                 progressText.textContent = percentage + '%';
             }
 
-            // 显示所有任务（不仅仅是正在下载的）
+            // 只渲染进行中的任务：全量任务列表（可能数千条）每 2 秒重建 DOM 会导致页面内存溢出。
+            // 统计数据（总数/完成/失败）已由上方数字展示，无需逐条渲染。
             const downloadingTasksContainer = el('queueBatchDownloadingTasks');
             if (downloadingTasksContainer) {
                 if (data.tasks && Array.isArray(data.tasks)) {
-                    // 显示所有任务，按状态分组
                     const downloadingTasks = data.tasks.filter(t => t.status === 'downloading');
-                    const doneTasks = data.tasks.filter(t => t.status === 'done');
-                    const failedTasks = data.tasks.filter(t => t.status === 'failed');
-                    const pendingTasks = data.tasks.filter(t => t.status === 'pending');
+                    // 最多渲染 50 个进行中任务，避免 DOM 膨胀
+                    const visible = downloadingTasks.slice(0, 50);
 
                     let html = '';
-
-                    // 显示正在下载的任务
-                    if (downloadingTasks.length > 0) {
-                        downloadingTasks.forEach(task => {
-                            html += `
-                                <div class="queue-item downloading" style="margin-bottom: 12px;">
-                                    <div class="queue-item-info" style="flex: 1;">
-                                        <div class="queue-item-title" title="${escapeHtml(task.title || '无标题')}">${escapeHtml(task.title || '无标题')}</div>
-                                        <div class="queue-item-meta">
-                                            <span>作者: ${escapeHtml(task.authorName || task.author || '-')}</span>
-                                        </div>
+                    visible.forEach(task => {
+                        html += `
+                            <div class="queue-item downloading" style="margin-bottom: 12px;">
+                                <div class="queue-item-info" style="flex: 1;">
+                                    <div class="queue-item-title" title="${escapeHtml(task.title || '无标题')}">${escapeHtml(task.title || '无标题')}</div>
+                                    <div class="queue-item-meta">
+                                        <span>作者: ${escapeHtml(task.authorName || task.author || '-')}</span>
                                     </div>
-                                    <div class="queue-item-progress">
-                                        <div class="queue-progress-bar">
-                                            <div class="queue-progress-fill" style="width: ${(task.progress || 0)}%;"></div>
-                                        </div>
-                                        <div class="queue-progress-text">
-                                            <span>${(task.progress || 0).toFixed(1)}%</span> · <span>${(task.downloadedMB || 0).toFixed(2)} MB</span>
-                                        </div>
-                                    </div>
-                                    <span class="queue-item-status downloading">下载中</span>
                                 </div>
-                            `;
-                        });
+                                <div class="queue-item-progress">
+                                    <div class="queue-progress-bar">
+                                        <div class="queue-progress-fill" style="width: ${(task.progress || 0)}%;"></div>
+                                    </div>
+                                    <div class="queue-progress-text">
+                                        <span>${(task.progress || 0).toFixed(1)}%</span> · <span>${(task.downloadedMB || 0).toFixed(2)} MB</span>
+                                    </div>
+                                </div>
+                                <span class="queue-item-status downloading">下载中</span>
+                            </div>
+                        `;
+                    });
+
+                    if (downloadingTasks.length > visible.length) {
+                        html += `<div style="text-align: center; color: var(--text-muted); padding: 8px; font-size: 12px;">其余 ${downloadingTasks.length - visible.length} 个进行中任务未显示</div>`;
                     }
 
-                    // 显示已完成的任务
-                    if (doneTasks.length > 0) {
-                        doneTasks.forEach(task => {
-                            html += `
-                                <div class="queue-item completed" style="margin-bottom: 12px;">
-                                    <div class="queue-item-info" style="flex: 1;">
-                                        <div class="queue-item-title" title="${escapeHtml(task.title || '无标题')}">${escapeHtml(task.title || '无标题')}</div>
-                                        <div class="queue-item-meta">
-                                            <span>作者: ${escapeHtml(task.authorName || task.author || '-')}</span>
-                                        </div>
-                                    </div>
-                                    <div class="queue-item-progress">
-                                        <div class="queue-progress-bar">
-                                            <div class="queue-progress-fill" style="width: 100%; background-color: var(--success-color, #52c41a);"></div>
-                                        </div>
-                                        <div class="queue-progress-text">
-                                            <span>100.0%</span> · <span>${(task.totalMB || task.downloadedMB || 0).toFixed(2)} MB</span>
-                                        </div>
-                                    </div>
-                                    <span class="queue-item-status completed">已完成</span>
-                                </div>
-                            `;
-                        });
-                    }
-
-                    // 显示失败的任务
-                    if (failedTasks.length > 0) {
-                        failedTasks.forEach(task => {
-                            html += `
-                                <div class="queue-item failed" style="margin-bottom: 12px;">
-                                    <div class="queue-item-info" style="flex: 1;">
-                                        <div class="queue-item-title" title="${escapeHtml(task.title || '无标题')}">${escapeHtml(task.title || '无标题')}</div>
-                                        <div class="queue-item-meta">
-                                            <span>作者: ${escapeHtml(task.authorName || task.author || '-')}</span>
-                                            ${task.error ? `<span style="color: var(--danger-color);">错误: ${escapeHtml(task.error)}</span>` : ''}
-                                        </div>
-                                    </div>
-                                    <div class="queue-item-progress">
-                                        <div class="queue-progress-bar">
-                                            <div class="queue-progress-fill failed" style="width: ${(task.progress || 0)}%;"></div>
-                                        </div>
-                                        <div class="queue-progress-text">
-                                            <span>${(task.progress || 0).toFixed(1)}%</span>
-                                        </div>
-                                    </div>
-                                    <span class="queue-item-status failed">失败</span>
-                                </div>
-                            `;
-                        });
-                    }
-
-                    // 显示等待中的任务
-                    if (pendingTasks.length > 0) {
-                        pendingTasks.forEach(task => {
-                            html += `
-                                <div class="queue-item pending" style="margin-bottom: 12px;">
-                                    <div class="queue-item-info" style="flex: 1;">
-                                        <div class="queue-item-title" title="${escapeHtml(task.title || '无标题')}">${escapeHtml(task.title || '无标题')}</div>
-                                        <div class="queue-item-meta">
-                                            <span>作者: ${escapeHtml(task.authorName || task.author || '-')}</span>
-                                        </div>
-                                    </div>
-                                    <div class="queue-item-progress">
-                                        <div class="queue-progress-bar">
-                                            <div class="queue-progress-fill" style="width: 0%;"></div>
-                                        </div>
-                                        <div class="queue-progress-text">
-                                            <span>0.0%</span>
-                                        </div>
-                                    </div>
-                                    <span class="queue-item-status pending">等待中</span>
-                                </div>
-                            `;
-                        });
-                    }
-
-                    downloadingTasksContainer.innerHTML = html || '<div style="text-align: center; color: var(--text-muted); padding: 20px;">暂无任务</div>';
+                    downloadingTasksContainer.innerHTML = html || '<div style="text-align: center; color: var(--text-muted); padding: 20px;">暂无进行中的任务</div>';
                 } else {
-                    downloadingTasksContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">暂无任务</div>';
+                    downloadingTasksContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">暂无进行中的任务</div>';
                 }
             }
 
@@ -1222,6 +1146,7 @@ let queueFilter = 'all';
 
 function setQueueFilter(filter) {
     queueFilter = filter;
+    window.__queueRenderPage = 1;
     document.querySelectorAll('.queue-filter-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filter);
     });
@@ -1273,16 +1198,46 @@ function renderQueueList() {
         return;
     }
 
+    // 限量渲染：3000+ 条目一次性建 DOM 会导致页面内存溢出（Out of Memory）。
+    // 每页 200 条，其余通过"加载更多"追加。
+    const PAGE_SIZE = 200;
+    const visibleCount = Math.min(items.length, (window.__queueRenderPage || 1) * PAGE_SIZE);
+    const visibleItems = items.slice(0, visibleCount);
+
     let html = '';
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i];
+    for (let i = 0; i < visibleItems.length; i++) {
+        const item = visibleItems[i];
         html += renderQueueItem(item, i);
+    }
+
+    if (items.length > visibleCount) {
+        html += `
+            <div style="text-align: center; padding: 12px;">
+                <button class="btn btn-secondary" onclick="loadMoreQueueItems()" style="padding: 8px 24px;">
+                    加载更多（剩余 ${items.length - visibleCount} 项）
+                </button>
+            </div>
+        `;
     }
 
     container.innerHTML = html;
 
     // Add drag-and-drop event listeners
     setupDragAndDrop();
+}
+
+// "加载更多"：翻页号+1 并只增量渲染（重渲染会丢失勾选，故提示）
+function loadMoreQueueItems() {
+    const checkedIds = Array.from(document.querySelectorAll('.queue-item-checkbox:checked')).map(cb => cb.dataset.id);
+    window.__queueRenderPage = (window.__queueRenderPage || 1) + 1;
+    renderQueueList();
+    // 恢复勾选状态
+    if (checkedIds.length > 0) {
+        document.querySelectorAll('.queue-item-checkbox').forEach(cb => {
+            if (checkedIds.includes(cb.dataset.id)) cb.checked = true;
+        });
+        updateStartSelectedButton();
+    }
 }
 
 // Render single queue item - Requirements: 10.1, 3.3, 10.6
