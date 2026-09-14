@@ -23,7 +23,7 @@ func TestReleaseHighlightsMatchCurrentVersion(t *testing.T) {
 	for _, expected := range []string{
 		"页面 OOM 根治",
 		"进度广播节流",
-		"轻量进度更新",
+		"完成检测批量化",
 		"内存优化",
 		"队列分页渲染",
 	} {
